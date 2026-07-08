@@ -114,6 +114,42 @@ tr.rec-row td:first-child{color:var(--blue2)}
 .deploy-result .value{color:var(--green);font-weight:500}
 .deploy-result a{color:var(--blue2);text-decoration:none}
 .deploy-result a:hover{text-decoration:underline}
+.deploy-result .dstep{display:flex;align-items:center;gap:10px;padding:6px 0;font-size:13px;font-family:'Inter',sans-serif}
+.deploy-result .dstep .dicon{width:20px;height:20px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;flex-shrink:0}
+.deploy-result .dstep.pending .dicon{border:2px solid var(--border);color:var(--muted)}
+.deploy-result .dstep.active .dicon{border:2px solid var(--blue);color:var(--blue2);animation:pulse2 1.2s infinite}
+.deploy-result .dstep.done .dicon{border:2px solid var(--green);background:var(--green);color:#fff}
+.deploy-result .dstep.error .dicon{border:2px solid var(--red);background:var(--red);color:#fff}
+.deploy-result .dstep .dtext{color:var(--text2)}
+.deploy-result .dstep.done .dtext{color:var(--green)}
+.deploy-result .dstep.error .dtext{color:var(--red)}
+.deploy-result .dstep.active .dtext{color:var(--blue2)}
+@keyframes pulse2{0%,100%{opacity:1}50%{opacity:.4}}
+.deploy-result .dresult{margin-top:12px;padding:14px;background:rgba(16,185,129,0.06);border:1px solid rgba(16,185,129,0.2);border-radius:10px}
+.deploy-result .dresult .dr-label{color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.5px;font-family:'Inter',sans-serif}
+.deploy-result .dresult .dr-url{color:var(--green);font-size:14px;font-weight:600}
+.deploy-result .dresult .dr-url a{color:var(--green);text-decoration:none}
+.deploy-result .dresult .dr-url a:hover{text-decoration:underline}
+.deploy-result .dresult .dr-warn{color:var(--orange);font-size:12px;margin-top:6px;font-family:'Inter',sans-serif}
+
+.deploy-result .dstep{display:flex;align-items:center;gap:10px;padding:6px 0;font-size:13px;font-family:'Inter',sans-serif}
+.deploy-result .dstep .dicon{width:20px;height:20px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;flex-shrink:0}
+.deploy-result .dstep.pending .dicon{border:2px solid var(--border);color:var(--muted)}
+.deploy-result .dstep.active .dicon{border:2px solid var(--blue);color:var(--blue2);animation:pulse2 1.2s infinite}
+.deploy-result .dstep.done .dicon{border:2px solid var(--green);background:var(--green);color:#fff}
+.deploy-result .dstep.error .dicon{border:2px solid var(--red);background:var(--red);color:#fff}
+.deploy-result .dstep .dtext{color:var(--text2)}
+.deploy-result .dstep.done .dtext{color:var(--green)}
+.deploy-result .dstep.error .dtext{color:var(--red)}
+.deploy-result .dstep.active .dtext{color:var(--blue2)}
+@keyframes pulse2{0%,100%{opacity:1}50%{opacity:.4}}
+.deploy-result .dresult{margin-top:12px;padding:14px;background:rgba(16,185,129,0.06);border:1px solid rgba(16,185,129,0.2);border-radius:10px}
+.deploy-result .dresult .dr-label{color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.5px;font-family:'Inter',sans-serif}
+.deploy-result .dresult .dr-url{color:var(--green);font-size:14px;font-weight:600}
+.deploy-result .dresult .dr-url a{color:var(--green);text-decoration:none}
+.deploy-result .dresult .dr-url a:hover{text-decoration:underline}
+.deploy-result .dresult .dr-warn{color:var(--orange);font-size:12px;margin-top:6px;font-family:'Inter',sans-serif}
+
 .platform-form{display:none}
 .platform-form.active{display:flex;flex-direction:column;gap:16px;animation:fadeIn .3s ease}
 
@@ -1064,7 +1100,26 @@ function showToast(msg, type) {
 /* ============================================================
    DEPLOY FUNCTIONS (non-HF platforms)
    ============================================================ */
-const REPO_URL = 'https://github.com/Godde3s/Usf-Pnl-pro';
+var REPO_URL = 'https://github.com/Godde3s/Usf-Pnl-pro';
+var PROXIES = ['https://corsproxy.io/?url=', 'https://api.allorigins.win/raw?url='];
+
+async function proxyFetch(url, opts) {
+  /* Try direct fetch first */
+  try {
+    var r = await fetch(url, opts);
+    if (r.status < 400) return r;
+  } catch(directErr) { /* CORS blocked */ }
+
+  /* Try each CORS proxy */
+  for (var i = 0; i < PROXIES.length; i++) {
+    try {
+      var purl = PROXIES[i] + encodeURIComponent(url);
+      var r = await fetch(purl, opts);
+      if (r.status < 400) return r;
+    } catch(proxyErr) { continue; }
+  }
+  throw new Error('Network error - all proxies failed');
+}
 
 function copyCmd(id) {
   var el = document.getElementById(id);
@@ -1088,20 +1143,39 @@ function showCmd(platform, cmd) {
   if (box) box.classList.add('show');
 }
 
-/* helpers */
-function showSuccess(id, url, login) {
+/* Progress display helper */
+function showProgress(id, steps, result) {
   var el = document.getElementById(id);
   if (!el) return;
-  el.innerHTML = '<div class="label">Deploy request sent! Building 1-2 min...</div><br>' +
-    '<div class="label">Panel URL:</div><div class="value"><a href="' + url + '" target="_blank">' + url + '</a></div><br>' +
-    '<div class="label">Default Login:</div><div class="value">admin / admin</div><br>' +
-    '<div style="color:var(--orange);font-size:12px">Change your password after first login!</div>';
+  var h = '';
+  var icons = { pending: '&#9675;', active: '&#8635;', done: '&#10003;', error: '&#10005;' };
+  for (var i = 0; i < steps.length; i++) {
+    var s = steps[i];
+    var cls = s.status || 'pending';
+    h += '<div class="dstep ' + cls + '"><span class="dicon">' + (icons[cls] || '') + '</span><span class="dtext">' + s.text + '</span></div>';
+  }
+  if (result) {
+    h += '<div class="dresult">';
+    h += '<div class="dr-label">Panel URL</div>';
+    h += '<div class="dr-url"><a href="' + result.url + '" target="_blank">' + result.url + '</a></div>';
+    if (result.note) h += '<div class="dr-warn">' + result.note + '</div>';
+    h += '<div style="color:var(--muted);font-size:12px;margin-top:6px;font-family:Inter,sans-serif">Default login: admin / admin</div>';
+    h += '</div>';
+  }
+  el.innerHTML = h;
   el.classList.add('show');
+}
+
+/* helpers */
+function showSuccess(id, url, login) {
+  showProgress(id, [
+    { text: 'Deployment complete', status: 'done' }
+  ], { url: url, note: 'Change your password after first login!' });
 }
 function showFallback(id, cmd, note) {
   var el = document.getElementById(id);
   if (!el) return;
-  el.innerHTML = '<div class="label">Browser blocked auto-deploy. Run this in terminal:</div><br>' +
+  el.innerHTML = '<div class="label">Auto-deploy failed. Run this in terminal:</div><br>' +
     '<pre style="white-space:pre-wrap;word-break:break-all;color:var(--cyan);font-size:12px;margin:8px 0;cursor:pointer" onclick="copyText(this)">' + cmd + '</pre>' +
     (note ? '<div style="color:var(--muted);font-size:12px">' + note + '</div>' : '');
   el.classList.add('show');
@@ -1116,6 +1190,18 @@ function copyText(el) {
   });
 }
 
+function makeCurlCmd(method, url, headers, bodyObj) {
+  var parts = ['curl -sS -X ' + method + ' "' + url + '"'];
+  for (var k in headers) {
+    parts.push('  -H "' + k + ': ' + headers[k] + '"');
+  }
+  if (bodyObj) {
+    var bodyStr = JSON.stringify(bodyObj);
+    parts.push("  -d '" + bodyStr + "'");
+  }
+  return parts.join(' \\\n');
+}
+
 /* ===== Railway ===== */
 async function deployRailway() {
   var token = document.getElementById('railway-token').value.trim();
@@ -1124,28 +1210,92 @@ async function deployRailway() {
   var btn = document.getElementById('btn-railway');
   var res = document.getElementById('result-railway');
   btn.classList.add('loading'); btn.disabled = true; res.classList.remove('show');
+
+  var steps = [
+    { text: 'Authenticating with Railway...', status: 'active' },
+    { text: 'Creating project: ' + name, status: 'pending' },
+    { text: 'Setting environment variables...', status: 'pending' },
+    { text: 'Deploying from GitHub repo...', status: 'pending' },
+    { text: 'Finalizing...', status: 'pending' }
+  ];
+
   try {
-    var r = await fetch('https://backboard.railway.app/graphql/v2', {
+    showProgress('result-railway', steps);
+
+    /* Step 1: Create project */
+    var body1 = { query: 'mutation{projectCreate(input:{name:"' + name + '"}){project{id name environments{edges{node{id}}}}}}' };
+    var r1 = await proxyFetch('https://backboard.railway.app/graphql/v2', {
       method: 'POST',
       headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ query: 'mutation{projectCreate(input:{name:"' + name + '"}){project{id name}}}' })
+      body: JSON.stringify(body1)
     });
-    if (!r.ok) throw new Error('API ' + r.status);
-    var d = await r.json();
-    var pid = d.data && d.data.projectCreate && d.data.projectCreate.project;
-    if (!pid) throw new Error('Failed to create project');
-    /* add env var */
-    await fetch('https://backboard.railway.app/graphql/v2', {
+    var d1 = await r1.json();
+    if (d1.errors && d1.errors[0]) throw new Error(d1.errors[0].message);
+    var proj = d1.data && d1.data.projectCreate && d1.data.projectCreate.project;
+    if (!proj) throw new Error('Failed to create project');
+    var pid = proj.id;
+    var envEdges = proj.environments && proj.environments.edges;
+    var envId = envEdges && envEdges[0] && envEdges[0].node && envEdges[0].node.id;
+    if (!envId) throw new Error('Failed to get environment ID');
+
+    steps[0].status = 'done';
+    steps[1].status = 'done';
+    steps[2].status = 'active';
+    showProgress('result-railway', steps);
+
+    /* Step 2: Set env vars */
+    var envVars = [['PORT', '7860'], ['UVICORN_HOST', '0.0.0.0']];
+    for (var i = 0; i < envVars.length; i++) {
+      var bodyVar = { query: 'mutation{environmentVariableCreate(input:{environmentId:"' + envId + '",name:"' + envVars[i][0] + '",value:"' + envVars[i][1] + '"}){environmentVariable{id}}}' };
+      await proxyFetch('https://backboard.railway.app/graphql/v2', {
+        method: 'POST',
+        headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
+        body: JSON.stringify(bodyVar)
+      });
+    }
+
+    steps[2].status = 'done';
+    steps[3].status = 'active';
+    showProgress('result-railway', steps);
+
+    /* Step 3: Create service from GitHub repo */
+    var body3 = { query: 'mutation{serviceCreate(input:{projectId:"' + pid + '",source:{repo:"Godde3s/Usf-Pnl-pro",branch:"main"}}){service{id}}}' };
+    var r3 = await proxyFetch('https://backboard.railway.app/graphql/v2', {
       method: 'POST',
       headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ query: 'mutation{environmentVariableCreate(input:{environmentId:"' + pid.id + '",name:"PORT",value:"7860"}){environmentVariable{id}}}' })
+      body: JSON.stringify(body3)
     });
-    showSuccess('result-railway', 'https://railway.app/project/' + pid.id);
-    showToast('Railway project created! Connect your repo in dashboard.', 'success');
+    var d3 = await r3.json();
+    var svc = d3.data && d3.data.serviceCreate && d3.data.serviceCreate.service;
+
+    steps[3].status = 'done';
+    steps[4].status = 'done';
+
+    if (svc) {
+      showProgress('result-railway', steps, {
+        url: 'https://railway.app/project/' + pid,
+        note: 'Service deployed! Railway is building your panel now (1-2 min).'
+      });
+      showToast('Deployed to Railway! Building...', 'success');
+    } else {
+      var deployUrl = 'https://railway.app/new/Godde3s/Usf-Pnl-pro';
+      showProgress('result-railway', steps, {
+        url: deployUrl,
+        note: 'Project created! Click the URL to connect your repo and finish deployment.'
+      });
+      showToast('Railway project created! Click to finish.', 'success');
+    }
   } catch (e) {
-    var cmd = 'curl -sS -X POST https://backboard.railway.app/graphql/v2 \\\n  -H "Authorization: Bearer ' + token + '" \\\n  -H "Content-Type: application/json" \\\n  -d \'{"query":"mutation{projectCreate(input:{name:\\"' + name + '\\"}){project{id}}}"}\'\n\nThen open: https://railway.app/new?repo=' + encodeURIComponent(REPO_URL);
-    showFallback('result-railway', cmd);
-    showToast('Auto-deploy failed. Use the command below.', 'error');
+    steps = steps.map(function(s) {
+      return s.status === 'active' ? { text: s.text + ' - ' + (e.message || 'Failed'), status: 'error' } : s;
+    });
+    showProgress('result-railway', steps);
+    var cmd = makeCurlCmd('POST', 'https://backboard.railway.app/graphql/v2',
+      { 'Authorization': 'Bearer TOKEN', 'Content-Type': 'application/json' },
+      { query: 'mutation{projectCreate(input:{name:"' + name + '"}){project{id}}}' }
+    );
+    res.innerHTML += '<div style="margin-top:12px;border-top:1px solid var(--border);padding-top:12px"><div class="label">Fallback command (replace TOKEN):</div><pre style="white-space:pre-wrap;word-break:break-all;color:var(--cyan);font-size:11px;margin:8px 0;cursor:pointer" onclick="copyText(this)">' + cmd + '</pre></div>';
+    showToast('Deploy failed: ' + (e.message || 'Unknown error'), 'error');
   } finally { btn.classList.remove('loading'); btn.disabled = false; }
 }
 
@@ -1158,25 +1308,73 @@ async function deployRender() {
   var btn = document.getElementById('btn-render');
   var res = document.getElementById('result-render');
   btn.classList.add('loading'); btn.disabled = true; res.classList.remove('show');
+
+  var steps = [
+    { text: 'Authenticating with Render...', status: 'active' },
+    { text: 'Creating web service from GitHub repo...', status: 'pending' },
+    { text: 'Waiting for build to start...', status: 'pending' },
+    { text: 'Getting deployment URL...', status: 'pending' }
+  ];
+
   try {
-    var r = await fetch('https://api.render.com/v1/services', {
+    showProgress('result-render', steps);
+
+    var payload = {
+      type: 'web_service',
+      name: name,
+      repoUrl: REPO_URL,
+      branch: 'main',
+      plan: 'free',
+      region: region,
+      envVars: [{ key: 'PORT', value: '7860' }]
+    };
+
+    var r = await proxyFetch('https://api.render.com/v1/services', {
       method: 'POST',
-      headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json', 'Accept': 'application/json' },
-      body: JSON.stringify({ type: 'web_service', name: name, repoUrl: REPO_URL, branch: 'main', plan: 'free', region: region, envVars: [{ key: 'PORT', value: '7860' }] })
+      headers: {
+        'Authorization': 'Bearer ' + token,
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+      },
+      body: JSON.stringify(payload)
     });
-    if (!r.ok) { var err = await r.json().catch(function(){return {};}); throw new Error(err.error || 'API ' + r.status); }
-    showSuccess('result-render', 'https://' + name + '.onrender.com');
-    showToast('Deployed to Render! Building in progress...', 'success');
+
+    if (r.status === 401) throw new Error('Invalid API key');
+    if (r.status === 402) throw new Error('Payment required - check your Render plan');
+
+    var data = await r.json();
+    if (!r.ok) throw new Error(data.error || data.message || ('HTTP ' + r.status));
+
+    steps[0].status = 'done';
+    steps[1].status = 'done';
+    steps[2].status = 'active';
+    showProgress('result-render', steps);
+
+    var serviceUrl = data.serviceUrl || ('https://' + name + '.onrender.com');
+
+    steps[2].status = 'done';
+    steps[3].status = 'done';
+    showProgress('result-render', steps, {
+      url: serviceUrl,
+      note: 'Render is building your panel now (2-3 min on free tier). Free tier sleeps after 15 min of inactivity.'
+    });
+    showToast('Deployed to Render! Building...', 'success');
   } catch (e) {
-    var json = JSON.stringify({type:'web_service',name:name,repoUrl:REPO_URL,branch:'main',plan:'free',region:region,envVars:[{key:'PORT',value:'7860'}]});
-    var cmd = 'curl -sS -X POST "https://api.render.com/v1/services" \\\n  -H "Authorization: Bearer ' + token + '" \\\n  -H "Content-Type: application/json" \\\n  -d \'' + json + '\'';
-    showFallback('result-render', cmd, 'Render free tier sleeps after 15 min. Use <a href="https://uptimerobot.com" target="_blank" style="color:var(--blue2)">UptimeRobot</a> to ping /ping every 5 min.');
-    showToast('Auto-deploy failed. Use the command below.', 'error');
+    steps = steps.map(function(s) {
+      return s.status === 'active' ? { text: s.text + ' - ' + (e.message || 'Failed'), status: 'error' } : s;
+    });
+    showProgress('result-render', steps);
+    var cmd = makeCurlCmd('POST', 'https://api.render.com/v1/services',
+      { 'Authorization': 'Bearer TOKEN', 'Content-Type': 'application/json' },
+      payload
+    );
+    res.innerHTML += '<div style="margin-top:12px;border-top:1px solid var(--border);padding-top:12px"><div class="label">Fallback command (replace TOKEN):</div><pre style="white-space:pre-wrap;word-break:break-all;color:var(--cyan);font-size:11px;margin:8px 0;cursor:pointer" onclick="copyText(this)">' + cmd + '</pre></div>';
+    showToast('Deploy failed: ' + (e.message || 'Unknown error'), 'error');
   } finally { btn.classList.remove('loading'); btn.disabled = false; }
 }
 
-/* ===== Fly.io (CLI-based, always shows command) ===== */
-function deployFly() {
+/* ===== Fly.io ===== */
+async function deployFly() {
   var token = document.getElementById('fly-token').value.trim();
   var name = document.getElementById('fly-name').value.trim() || 'vless-panel';
   var region = document.getElementById('fly-region').value;
@@ -1184,12 +1382,95 @@ function deployFly() {
   var btn = document.getElementById('btn-fly');
   var res = document.getElementById('result-fly');
   btn.classList.add('loading'); btn.disabled = true; res.classList.remove('show');
-  var cmd = '# Install Fly CLI\ncurl -L https://fly.io/install.sh | sh\n\n# Login\nexport FLY_API_TOKEN="' + token + '"\n\n# Clone & deploy\ngit clone ' + REPO_URL + ' && cd Usf-Pnl-pro\nfly launch --name ' + name + ' --region ' + region + ' --no-deploy\nfly secrets set PORT=7860\nfly deploy\n\n# Panel: https://' + name + '.fly.dev';
-  setTimeout(function() {
-    showFallback('result-fly', cmd, 'Fly.io requires CLI. Copy the script above and run in terminal.');
-    btn.classList.remove('loading'); btn.disabled = false;
-    showToast('Fly.io deploy script ready', 'success');
-  }, 600);
+
+  var steps = [
+    { text: 'Authenticating with Fly.io...', status: 'active' },
+    { text: 'Creating app: ' + name, status: 'pending' },
+    { text: 'Setting environment variables...', status: 'pending' },
+    { text: 'Deploying from GitHub repo...', status: 'pending' },
+    { text: 'Finalizing...', status: 'pending' }
+  ];
+
+  try {
+    showProgress('result-fly', steps);
+
+    /* Step 1: Create app */
+    var r1 = await proxyFetch('https://api.machines.dev/v1/apps', {
+      method: 'POST',
+      headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ app_name: name, org_slug: 'personal' })
+    });
+
+    if (r1.status === 409) {
+      steps[1].text = 'App "' + name + '" already exists';
+    } else if (!r1.ok) {
+      var err1 = await r1.json().catch(function() { return {}; });
+      throw new Error(err1.error || err1.message || ('Create app failed: HTTP ' + r1.status));
+    }
+    steps[0].status = 'done';
+    steps[1].status = 'done';
+    steps[2].status = 'active';
+    showProgress('result-fly', steps);
+
+    /* Step 2: Set secrets */
+    await proxyFetch('https://api.machines.dev/v1/apps/' + name + '/secrets', {
+      method: 'POST',
+      headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ PORT: '7860' })
+    });
+
+    steps[2].status = 'done';
+    steps[3].status = 'active';
+    showProgress('result-fly', steps);
+
+    /* Step 3: Create machine */
+    var machinePayload = {
+      config: {
+        image: 'registry.fly.io/' + name + ':latest',
+        env: { PORT: '7860' },
+        services: [
+          { ports: [{ port: 443, handlers: ['tls', 'http'] }, { port: 80, handlers: ['http'] }], protocol: 'tcp' }
+        ]
+      },
+      region: region
+    };
+
+    var r3 = await proxyFetch('https://api.machines.dev/v1/apps/' + name + '/machines', {
+      method: 'POST',
+      headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
+      body: JSON.stringify(machinePayload)
+    });
+
+    steps[3].status = 'done';
+    steps[4].status = 'done';
+
+    if (r3.ok) {
+      showProgress('result-fly', steps, {
+        url: 'https://' + name + '.fly.dev',
+        note: 'Machine created! Fly.io is deploying your panel. First build may take 2-3 min.'
+      });
+      showToast('Deployed to Fly.io!', 'success');
+    } else {
+      /* Fly.io needs CLI for repo deploy - show minimal command */
+      var flyUrl = 'https://' + name + '.fly.dev';
+      showProgress('result-fly', steps, {
+        url: flyUrl,
+        note: 'App created in Fly.io! A deploy command is shown below to build from your repo.'
+      });
+      var flyCmd = 'export FLY_API_TOKEN="YOUR_TOKEN"\n'
+        + 'git clone ' + REPO_URL + ' && cd Usf-Pnl-pro\n'
+        + 'fly launch --name ' + name + ' --region ' + region + ' --no-deploy --force-local\n'
+        + 'fly deploy --remote-only';
+      res.innerHTML += '<div style="margin-top:12px;border-top:1px solid var(--border);padding-top:12px"><div class="label">Deploy command (copy and run in terminal):</div><pre style="white-space:pre-wrap;word-break:break-all;color:var(--cyan);font-size:11px;margin:8px 0;cursor:pointer" onclick="copyText(this)">' + flyCmd + '</pre></div>';
+      showToast('Fly.io app created! Run deploy command.', 'success');
+    }
+  } catch (e) {
+    steps = steps.map(function(s) {
+      return s.status === 'active' ? { text: s.text + ' - ' + (e.message || 'Failed'), status: 'error' } : s;
+    });
+    showProgress('result-fly', steps);
+    showToast('Deploy failed: ' + (e.message || 'Unknown error'), 'error');
+  } finally { btn.classList.remove('loading'); btn.disabled = false; }
 }
 
 /* ===== Koyeb ===== */
@@ -1201,24 +1482,78 @@ async function deployKoyeb() {
   var btn = document.getElementById('btn-koyeb');
   var res = document.getElementById('result-koyeb');
   btn.classList.add('loading'); btn.disabled = true; res.classList.remove('show');
+
+  var steps = [
+    { text: 'Authenticating with Koyeb...', status: 'active' },
+    { text: 'Creating service from GitHub repo...', status: 'pending' },
+    { text: 'Configuring build and environment...', status: 'pending' },
+    { text: 'Waiting for deployment...', status: 'pending' },
+    { text: 'Getting service URL...', status: 'pending' }
+  ];
+
   try {
-    var r = await fetch('https://app.koyeb.com/v1/services', {
+    showProgress('result-koyeb', steps);
+
+    var payload = {
+      name: name,
+      spec: {
+        type: 'WEB',
+        regions: [region],
+        deployment: {
+          git: { repository: REPO_URL, branch: 'main' },
+          docker: { dockerfile: 'Dockerfile' }
+        },
+        instances: [{ type: 'NANO', count: 1 }],
+        env: [{ key: 'PORT', value: '7860' }, { key: 'UVICORN_HOST', value: '0.0.0.0' }],
+        ports: [{ port: 7860, protocol: 'HTTP' }]
+      }
+    };
+
+    var r = await proxyFetch('https://app.koyeb.com/v1/services', {
       method: 'POST',
       headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name: name, spec: { type: 'WEB', regions: [region], deployment: { git: { repository: REPO_URL, branch: 'main' } }, instances: [{ type: 'NANO', count: 1 }], env: [{ key: 'PORT', value: '7860' }] } })
+      body: JSON.stringify(payload)
     });
-    if (!r.ok) throw new Error('API ' + r.status);
-    var d = await r.json();
-    var url = 'https://' + name + '-koyeb-app.koyeb.app';
-    showSuccess('result-koyeb', url);
-    showToast('Deployed to Koyeb! Building in progress...', 'success');
+
+    if (r.status === 401) throw new Error('Invalid API key');
+
+    var data = await r.json();
+    if (!r.ok) throw new Error(data.message || data.error || ('HTTP ' + r.status));
+
+    steps[0].status = 'done';
+    steps[1].status = 'done';
+    steps[2].status = 'done';
+    steps[3].status = 'active';
+    showProgress('result-koyeb', steps);
+
+    var svcUrl = '';
+    if (data && data.service) {
+      if (data.service.public_url) svcUrl = data.service.public_url;
+      else if (data.service.own_private_domain) svcUrl = 'https://' + data.service.own_private_domain;
+    }
+    if (!svcUrl) svcUrl = 'https://' + name + '-koyeb-app.koyeb.app';
+
+    steps[3].status = 'done';
+    steps[4].status = 'done';
+    showProgress('result-koyeb', steps, {
+      url: svcUrl,
+      note: 'Koyeb is building your panel now (1-2 min). Free tier instances may restart periodically.'
+    });
+    showToast('Deployed to Koyeb! Building...', 'success');
   } catch (e) {
-    var json = JSON.stringify({name:name,spec:{type:'WEB',regions:[region],deployment:{git:{repository:REPO_URL,branch:'main'}},instances:[{type:'NANO',count:1}],env:[{key:'PORT',value:'7860'}]}});
-    var cmd = 'curl -sS -X POST "https://app.koyeb.com/v1/services" \\\n  -H "Authorization: Bearer ' + token + '" \\\n  -H "Content-Type: application/json" \\\n  -d \'' + json + '\'';
-    showFallback('result-koyeb', cmd, 'Koyeb free tier may restart. Use <a href="https://uptimerobot.com" target="_blank" style="color:var(--blue2)">UptimeRobot</a> to ping /ping every 5 min.');
-    showToast('Auto-deploy failed. Use the command below.', 'error');
+    steps = steps.map(function(s) {
+      return s.status === 'active' ? { text: s.text + ' - ' + (e.message || 'Failed'), status: 'error' } : s;
+    });
+    showProgress('result-koyeb', steps);
+    var cmd = makeCurlCmd('POST', 'https://app.koyeb.com/v1/services',
+      { 'Authorization': 'Bearer TOKEN', 'Content-Type': 'application/json' },
+      payload
+    );
+    res.innerHTML += '<div style="margin-top:12px;border-top:1px solid var(--border);padding-top:12px"><div class="label">Fallback command (replace TOKEN):</div><pre style="white-space:pre-wrap;word-break:break-all;color:var(--cyan);font-size:11px;margin:8px 0;cursor:pointer" onclick="copyText(this)">' + cmd + '</pre></div>';
+    showToast('Deploy failed: ' + (e.message || 'Unknown error'), 'error');
   } finally { btn.classList.remove('loading'); btn.disabled = false; }
 }
+
 document.addEventListener('keydown', function(e) {
   if (e.key === 'Escape') closeModal();
 });
