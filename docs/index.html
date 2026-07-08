@@ -204,6 +204,21 @@ tr.rec-row td:first-child{color:var(--blue2)}
 .stat .num{font-size:2rem;font-weight:800;font-family:'JetBrains Mono',monospace;background:linear-gradient(135deg,var(--blue2),var(--purple));-webkit-background-clip:text;-webkit-text-fill-color:transparent}
 .stat .label{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-top:4px}
 
+
+/* Deploy Command Box */
+.deploy-cmd{display:none;margin-top:20px;padding:20px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);font-family:'JetBrains Mono',monospace;font-size:12px;line-height:1.8;word-break:break-all;position:relative}
+.deploy-cmd.show{display:block;animation:fadeIn .4s ease}
+.deploy-cmd .cmd-label{color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px}
+.deploy-cmd pre{white-space:pre-wrap;word-break:break-all;color:var(--text2);margin:0;background:transparent;padding:0}
+.deploy-cmd .copy-cmd{position:absolute;top:12px;right:12px;padding:6px 14px;border-radius:8px;border:1px solid var(--border);background:var(--bg2);color:var(--text2);font-size:12px;cursor:pointer;font-family:inherit;transition:all .2s;display:flex;align-items:center;gap:6px}
+.deploy-cmd .copy-cmd:hover{border-color:var(--blue);color:var(--blue2)}
+.deploy-cmd .note{color:var(--muted);font-size:12px;margin-top:12px;line-height:1.6}
+.deploy-cmd .note a{color:var(--blue2);text-decoration:none}
+.deploy-cmd .note a:hover{text-decoration:underline}
+.deploy-cmd .success-url{color:var(--green);font-weight:600;font-size:14px;margin-top:8px}
+.deploy-cmd .success-url a{color:var(--green);text-decoration:none}
+.deploy-cmd .success-url a:hover{text-decoration:underline}
+
 /* Responsive */
 @media(max-width:640px){
   .hero{padding:4rem 1.5rem 3rem}
@@ -424,9 +439,9 @@ tr.rec-row td:first-child{color:var(--blue2)}
     <!-- Railway Form -->
     <div class="platform-form" id="form-railway">
       <div class="form-group">
-        <label class="form-label">GitHub Repository URL</label>
-        <input class="form-input" type="text" id="railway-repo" placeholder="https://github.com/your-username/vless-multi-platform">
-        <div class="form-hint">Fork this repo to your GitHub account first</div>
+        <label class="form-label">Railway API Token</label>
+        <input class="form-input" type="password" id="railway-token" placeholder="Token from railway.app/account/tokens" autocomplete="off">
+        <div class="form-hint">Need a token? <a href="https://railway.app/account/tokens" target="_blank">Get it here</a></div>
       </div>
       <div class="form-group">
         <label class="form-label">Project Name</label>
@@ -441,29 +456,28 @@ tr.rec-row td:first-child{color:var(--blue2)}
           <option value="ap-southeast-1">Asia Pacific (ap-southeast-1)</option>
         </select>
       </div>
-      <div class="form-help">
-        <a href="https://railway.app/account/tokens" target="_blank">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-          Get Railway Token
-        </a>
-        <span class="help-sep">|</span>
-        <a href="https://railway.app/new" target="_blank">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
-          Open Railway Dashboard
-        </a>
-      </div>
-      <button class="btn btn-primary btn-lg" style="width:100%;justify-content:center;margin-top:8px" onclick="showGuide('railway')">
+      <button class="btn btn-primary btn-lg" id="btn-railway" style="width:100%;justify-content:center;margin-top:8px" onclick="deployRailway()">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 2L11 13"/><path d="M22 2l-7 20-4-9-9-4 20-7z"/></svg>
         <span class="btn-text">Deploy to Railway</span>
+        <div class="spinner"></div>
       </button>
+      <div class="deploy-cmd" id="result-railway">
+        <div class="cmd-label">Run in your terminal:</div>
+        <button class="copy-cmd" onclick="copyCmd('cmd-railway')">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+          Copy
+        </button>
+        <pre id="cmd-railway"></pre>
+        <div class="note">After running, your panel URL will be shown. Login: <code>admin / admin</code></div>
+      </div>
     </div>
 
     <!-- Render Form -->
     <div class="platform-form" id="form-render">
       <div class="form-group">
-        <label class="form-label">GitHub Repository URL</label>
-        <input class="form-input" type="text" id="render-repo" placeholder="https://github.com/your-username/vless-multi-platform">
-        <div class="form-hint">Fork this repo to your GitHub account first</div>
+        <label class="form-label">Render API Key</label>
+        <input class="form-input" type="password" id="render-token" placeholder="API Key from dashboard.render.com/account" autocomplete="off">
+        <div class="form-hint">Need an API key? <a href="https://dashboard.render.com/account" target="_blank">Get it here</a></div>
       </div>
       <div class="form-group">
         <label class="form-label">Service Name</label>
@@ -472,40 +486,33 @@ tr.rec-row td:first-child{color:var(--blue2)}
       <div class="form-group">
         <label class="form-label">Region</label>
         <select class="form-select" id="render-region">
-          <option value="us-west">Oregon (us-west)</option>
-          <option value="eu-west">Frankfurt (eu-west)</option>
-          <option value="ap-southeast">Singapore (ap-southeast)</option>
+          <option value="oregon">Oregon (us-west)</option>
+          <option value="frankfurt">Frankfurt (eu-west)</option>
+          <option value="singapore">Singapore (ap-southeast)</option>
         </select>
       </div>
-      <div class="form-group">
-        <label class="form-label">Plan</label>
-        <select class="form-select" id="render-plan">
-          <option value="free">Free</option>
-        </select>
-      </div>
-      <div class="form-help">
-        <a href="https://dashboard.render.com/account" target="_blank">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-          Get Render API Key
-        </a>
-        <span class="help-sep">|</span>
-        <a href="https://dashboard.render.com/select-repo?srp=git&branch=main&orgId=" target="_blank">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
-          Open Render Dashboard
-        </a>
-      </div>
-      <button class="btn btn-primary btn-lg" style="width:100%;justify-content:center;margin-top:8px" onclick="showGuide('render')">
+      <button class="btn btn-primary btn-lg" id="btn-render" style="width:100%;justify-content:center;margin-top:8px" onclick="deployRender()">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 2L11 13"/><path d="M22 2l-7 20-4-9-9-4 20-7z"/></svg>
         <span class="btn-text">Deploy to Render</span>
+        <div class="spinner"></div>
       </button>
+      <div class="deploy-cmd" id="result-render">
+        <div class="cmd-label">Run in your terminal:</div>
+        <button class="copy-cmd" onclick="copyCmd('cmd-render')">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+          Copy
+        </button>
+        <pre id="cmd-render"></pre>
+        <div class="note">Render free tier sleeps after 15 min. Set up <a href="https://uptimerobot.com" target="_blank">UptimeRobot</a> to ping <code>/ping</code> every 5 min.</div>
+      </div>
     </div>
 
     <!-- Fly.io Form -->
     <div class="platform-form" id="form-fly">
       <div class="form-group">
-        <label class="form-label">GitHub Repository URL</label>
-        <input class="form-input" type="text" id="fly-repo" placeholder="https://github.com/your-username/vless-multi-platform">
-        <div class="form-hint">Fork this repo and clone it locally first</div>
+        <label class="form-label">Fly.io Token</label>
+        <input class="form-input" type="password" id="fly-token" placeholder="Token from fly.io/user/tokens" autocomplete="off">
+        <div class="form-hint">Need a token? <a href="https://fly.io/user/tokens" target="_blank">Get it here</a> (requires credit card, not charged)</div>
       </div>
       <div class="form-group">
         <label class="form-label">App Name</label>
@@ -523,29 +530,28 @@ tr.rec-row td:first-child{color:var(--blue2)}
           <option value="den">Dallas (den)</option>
         </select>
       </div>
-      <div class="form-help">
-        <a href="https://fly.io/user/tokens" target="_blank">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-          Get Fly.io Token
-        </a>
-        <span class="help-sep">|</span>
-        <a href="https://dash.fly.io" target="_blank">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
-          Fly Dashboard
-        </a>
-      </div>
-      <button class="btn btn-primary btn-lg" style="width:100%;justify-content:center;margin-top:8px" onclick="showGuide('fly')">
+      <button class="btn btn-primary btn-lg" id="btn-fly" style="width:100%;justify-content:center;margin-top:8px" onclick="deployFly()">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 2L11 13"/><path d="M22 2l-7 20-4-9-9-4 20-7z"/></svg>
         <span class="btn-text">Deploy to Fly.io</span>
+        <div class="spinner"></div>
       </button>
+      <div class="deploy-cmd" id="result-fly">
+        <div class="cmd-label">Run in your terminal:</div>
+        <button class="copy-cmd" onclick="copyCmd('cmd-fly')">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+          Copy
+        </button>
+        <pre id="cmd-fly"></pre>
+        <div class="note">After running, access at <code>https://FLY_APP_NAME.fly.dev</code> &mdash; Login: <code>admin / admin</code></div>
+      </div>
     </div>
 
     <!-- Koyeb Form -->
     <div class="platform-form" id="form-koyeb">
       <div class="form-group">
-        <label class="form-label">GitHub Repository URL</label>
-        <input class="form-input" type="text" id="koyeb-repo" placeholder="https://github.com/your-username/vless-multi-platform">
-        <div class="form-hint">Fork this repo to your GitHub account first</div>
+        <label class="form-label">Koyeb API Key</label>
+        <input class="form-input" type="password" id="koyeb-token" placeholder="API Key from app.koyeb.com/account/api-keys" autocomplete="off">
+        <div class="form-hint">Need an API key? <a href="https://app.koyeb.com/account/api-keys" target="_blank">Get it here</a></div>
       </div>
       <div class="form-group">
         <label class="form-label">Service Name</label>
@@ -558,21 +564,20 @@ tr.rec-row td:first-child{color:var(--blue2)}
           <option value="was">Washington DC (was)</option>
         </select>
       </div>
-      <div class="form-help">
-        <a href="https://app.koyeb.com/account/api-keys" target="_blank">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-          Get Koyeb API Key
-        </a>
-        <span class="help-sep">|</span>
-        <a href="https://app.koyeb.com/services/create" target="_blank">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
-          Create Koyeb Service
-        </a>
-      </div>
-      <button class="btn btn-primary btn-lg" style="width:100%;justify-content:center;margin-top:8px" onclick="showGuide('koyeb')">
+      <button class="btn btn-primary btn-lg" id="btn-koyeb" style="width:100%;justify-content:center;margin-top:8px" onclick="deployKoyeb()">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 2L11 13"/><path d="M22 2l-7 20-4-9-9-4 20-7z"/></svg>
         <span class="btn-text">Deploy to Koyeb</span>
+        <div class="spinner"></div>
       </button>
+      <div class="deploy-cmd" id="result-koyeb">
+        <div class="cmd-label">Run in your terminal:</div>
+        <button class="copy-cmd" onclick="copyCmd('cmd-koyeb')">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+          Copy
+        </button>
+        <pre id="cmd-koyeb"></pre>
+        <div class="note">Koyeb free tier (Eco) may restart. Set up <a href="https://uptimerobot.com" target="_blank">UptimeRobot</a> to ping <code>/ping</code> every 5 min.</div>
+      </div>
     </div>
   </div>
 </section>
@@ -1086,6 +1091,201 @@ function showToast(msg, type) {
 /* ============================================================
    KEYBOARD / ESC
    ============================================================ */
+
+
+/* ============================================================
+   DEPLOY FUNCTIONS (non-HF platforms)
+   ============================================================ */
+const REPO_URL = 'https://github.com/Godde3s/Usf-Pnl-pro';
+
+function copyCmd(id) {
+  var el = document.getElementById(id);
+  if (!el) return;
+  navigator.clipboard.writeText(el.textContent).then(function() {
+    showToast('Command copied to clipboard!', 'success');
+  }).catch(function() {
+    var range = document.createRange();
+    range.selectNodeContents(el);
+    window.getSelection().removeAllRanges();
+    window.getSelection().addRange(range);
+    document.execCommand('copy');
+    showToast('Command copied!', 'success');
+  });
+}
+
+function showCmd(platform, cmd) {
+  var el = document.getElementById('cmd-' + platform);
+  var box = document.getElementById('result-' + platform);
+  if (el) el.textContent = cmd;
+  if (box) box.classList.add('show');
+}
+
+function deployRailway() {
+  var token = document.getElementById('railway-token').value.trim();
+  var name = document.getElementById('railway-name').value.trim() || 'vless-panel';
+  var region = document.getElementById('railway-region').value;
+  if (!token) { showToast('Enter your Railway API token', 'error'); return; }
+  var btn = document.getElementById('btn-railway');
+  btn.classList.add('loading'); btn.disabled = true;
+  document.getElementById('result-railway').classList.remove('show');
+
+  var cmd = '# Step 1: Create Railway project and service
+' +
+    'curl -sS -X POST https://backboard.railway.app/graphql/v2 \
+' +
+    '  -H "Authorization: Bearer ' + token + '" \
+' +
+    '  -H "Content-Type: application/json" \
+' +
+    '  -d '{"query":"mutation { projectCreate(input:{name:\"' + name + '"}) { project { id } } }"}'
+
+' +
+    '# Step 2: Open Railway dashboard and connect your repo
+' +
+    '# https://railway.app/new?repo=' + encodeURIComponent(REPO_URL) + '
+
+' +
+    '# Step 3: Set environment variable PORT=7860 in Railway settings';
+
+  setTimeout(function() {
+    showCmd('railway', cmd);
+    btn.classList.remove('loading'); btn.disabled = false;
+    showToast('Railway deploy command ready - copy and run in terminal', 'success');
+  }, 800);
+}
+
+function deployRender() {
+  var token = document.getElementById('render-token').value.trim();
+  var name = document.getElementById('render-name').value.trim() || 'vless-panel';
+  var region = document.getElementById('render-region').value;
+  if (!token) { showToast('Enter your Render API key', 'error'); return; }
+  var btn = document.getElementById('btn-render');
+  btn.classList.add('loading'); btn.disabled = true;
+  document.getElementById('result-render').classList.remove('show');
+
+  var cmd = 'curl -sS -X POST "https://api.render.com/v1/services" \
+' +
+    '  -H "Authorization: Bearer ' + token + '" \
+' +
+    '  -H "Content-Type: application/json" \
+' +
+    '  -H "Accept: application/json" \
+' +
+    '  -d '{
+' +
+    '    "type": "web_service",
+' +
+    '    "name": "' + name + '",
+' +
+    '    "repoUrl": "' + REPO_URL + '",
+' +
+    '    "branch": "main",
+' +
+    '    "plan": "free",
+' +
+    '    "region": "' + region + '",
+' +
+    '    "envVars": [{"key": "PORT", "value": "7860"}]
+' +
+    '  }'';
+
+  setTimeout(function() {
+    showCmd('render', cmd);
+    btn.classList.remove('loading'); btn.disabled = false;
+    showToast('Render deploy command ready - copy and run in terminal', 'success');
+  }, 800);
+}
+
+function deployFly() {
+  var token = document.getElementById('fly-token').value.trim();
+  var name = document.getElementById('fly-name').value.trim() || 'vless-panel';
+  var region = document.getElementById('fly-region').value;
+  if (!token) { showToast('Enter your Fly.io token', 'error'); return; }
+  var btn = document.getElementById('btn-fly');
+  btn.classList.add('loading'); btn.disabled = true;
+  document.getElementById('result-fly').classList.remove('show');
+
+  var cmd = '# Install Fly CLI (if not installed)
+' +
+    'curl -L https://fly.io/install.sh | sh
+
+' +
+    '# Authenticate with your token
+' +
+    'export FLY_API_TOKEN="' + token + '"
+
+' +
+    '# Clone and deploy
+' +
+    'git clone ' + REPO_URL + ' && cd Usf-Pnl-pro
+' +
+    'fly launch --name ' + name + ' --region ' + region + ' --no-deploy
+' +
+    'fly secrets set PORT=7860
+' +
+    'fly deploy
+
+' +
+    '# Your panel: https://' + name + '.fly.dev';
+
+  setTimeout(function() {
+    showCmd('fly', cmd);
+    btn.classList.remove('loading'); btn.disabled = false;
+    showToast('Fly.io deploy script ready - copy and run in terminal', 'success');
+  }, 800);
+}
+
+function deployKoyeb() {
+  var token = document.getElementById('koyeb-token').value.trim();
+  var name = document.getElementById('koyeb-name').value.trim() || 'vless-panel';
+  var region = document.getElementById('koyeb-region').value;
+  if (!token) { showToast('Enter your Koyeb API key', 'error'); return; }
+  var btn = document.getElementById('btn-koyeb');
+  btn.classList.add('loading'); btn.disabled = true;
+  document.getElementById('result-koyeb').classList.remove('show');
+
+  var cmd = 'curl -sS -X POST "https://app.koyeb.com/v1/services" \
+' +
+    '  -H "Authorization: Bearer ' + token + '" \
+' +
+    '  -H "Content-Type: application/json" \
+' +
+    '  -d '{
+' +
+    '    "name": "' + name + '",
+' +
+    '    "spec": {
+' +
+    '      "type": "WEB",
+' +
+    '      "regions": ["' + region + '"],
+' +
+    '      "deployment": {
+' +
+    '        "git": {
+' +
+    '          "repository": "' + REPO_URL + '",
+' +
+    '          "branch": "main"
+' +
+    '        }
+' +
+    '      },
+' +
+    '      "instances": [{"type": "NANO", "count": 1}],
+' +
+    '      "env": [{"key": "PORT", "value": "7860"}]
+' +
+    '    }
+' +
+    '  }'';
+
+  setTimeout(function() {
+    showCmd('koyeb', cmd);
+    btn.classList.remove('loading'); btn.disabled = false;
+    showToast('Koyeb deploy command ready - copy and run in terminal', 'success');
+  }, 800);
+}
 document.addEventListener('keydown', function(e) {
   if (e.key === 'Escape') closeModal();
 });
