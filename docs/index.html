@@ -926,6 +926,8 @@ async function deployHuggingFace() {
       /* space already exists - fine */
     } else if (createRes.status === 401 || createRes.status === 403) {
       throw new Error('Permission denied. Token needs WRITE scope.');
+    } else if (createRes.status === 402) {
+      throw new Error('HF requires a payment method for Docker Spaces. Add a card at huggingface.co/settings/billing (free tier, $0).');
     } else if (!createRes.ok) {
       var errText = await createRes.text().catch(function() { return ''; });
       throw new Error('Create space failed (HTTP ' + createRes.status + '): ' + errText.substring(0, 100));
