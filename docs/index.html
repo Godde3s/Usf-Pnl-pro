@@ -461,15 +461,7 @@ tr.rec-row td:first-child{color:var(--blue2)}
         <span class="btn-text">Deploy to Railway</span>
         <div class="spinner"></div>
       </button>
-      <div class="deploy-cmd" id="result-railway">
-        <div class="cmd-label">Run in your terminal:</div>
-        <button class="copy-cmd" onclick="copyCmd('cmd-railway')">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
-          Copy
-        </button>
-        <pre id="cmd-railway"></pre>
-        <div class="note">After running, your panel URL will be shown. Login: <code>admin / admin</code></div>
-      </div>
+      <div class="deploy-result" id="result-railway"></div>
     </div>
 
     <!-- Render Form -->
@@ -496,15 +488,7 @@ tr.rec-row td:first-child{color:var(--blue2)}
         <span class="btn-text">Deploy to Render</span>
         <div class="spinner"></div>
       </button>
-      <div class="deploy-cmd" id="result-render">
-        <div class="cmd-label">Run in your terminal:</div>
-        <button class="copy-cmd" onclick="copyCmd('cmd-render')">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
-          Copy
-        </button>
-        <pre id="cmd-render"></pre>
-        <div class="note">Render free tier sleeps after 15 min. Set up <a href="https://uptimerobot.com" target="_blank">UptimeRobot</a> to ping <code>/ping</code> every 5 min.</div>
-      </div>
+      <div class="deploy-result" id="result-render"></div>
     </div>
 
     <!-- Fly.io Form -->
@@ -535,15 +519,7 @@ tr.rec-row td:first-child{color:var(--blue2)}
         <span class="btn-text">Deploy to Fly.io</span>
         <div class="spinner"></div>
       </button>
-      <div class="deploy-cmd" id="result-fly">
-        <div class="cmd-label">Run in your terminal:</div>
-        <button class="copy-cmd" onclick="copyCmd('cmd-fly')">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
-          Copy
-        </button>
-        <pre id="cmd-fly"></pre>
-        <div class="note">After running, access at <code>https://FLY_APP_NAME.fly.dev</code> &mdash; Login: <code>admin / admin</code></div>
-      </div>
+      <div class="deploy-result" id="result-fly"></div>
     </div>
 
     <!-- Koyeb Form -->
@@ -569,15 +545,7 @@ tr.rec-row td:first-child{color:var(--blue2)}
         <span class="btn-text">Deploy to Koyeb</span>
         <div class="spinner"></div>
       </button>
-      <div class="deploy-cmd" id="result-koyeb">
-        <div class="cmd-label">Run in your terminal:</div>
-        <button class="copy-cmd" onclick="copyCmd('cmd-koyeb')">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
-          Copy
-        </button>
-        <pre id="cmd-koyeb"></pre>
-        <div class="note">Koyeb free tier (Eco) may restart. Set up <a href="https://uptimerobot.com" target="_blank">UptimeRobot</a> to ping <code>/ping</code> every 5 min.</div>
-      </div>
+      <div class="deploy-result" id="result-koyeb"></div>
     </div>
   </div>
 </section>
@@ -1120,101 +1088,136 @@ function showCmd(platform, cmd) {
   if (box) box.classList.add('show');
 }
 
-function deployRailway() {
+/* helpers */
+function showSuccess(id, url, login) {
+  var el = document.getElementById(id);
+  if (!el) return;
+  el.innerHTML = '<div class="label">Deploy request sent! Building 1-2 min...</div><br>' +
+    '<div class="label">Panel URL:</div><div class="value"><a href="' + url + '" target="_blank">' + url + '</a></div><br>' +
+    '<div class="label">Default Login:</div><div class="value">admin / admin</div><br>' +
+    '<div style="color:var(--orange);font-size:12px">Change your password after first login!</div>';
+  el.classList.add('show');
+}
+function showFallback(id, cmd, note) {
+  var el = document.getElementById(id);
+  if (!el) return;
+  el.innerHTML = '<div class="label">Browser blocked auto-deploy. Run this in terminal:</div><br>' +
+    '<pre style="white-space:pre-wrap;word-break:break-all;color:var(--cyan);font-size:12px;margin:8px 0;cursor:pointer" onclick="copyText(this)">' + cmd + '</pre>' +
+    (note ? '<div style="color:var(--muted);font-size:12px">' + note + '</div>' : '');
+  el.classList.add('show');
+}
+function copyText(el) {
+  navigator.clipboard.writeText(el.textContent).then(function() {
+    showToast('Copied!', 'success');
+  }).catch(function() {
+    var r = document.createRange(); r.selectNodeContents(el);
+    window.getSelection().removeAllRanges(); window.getSelection().addRange(r);
+    document.execCommand('copy'); showToast('Copied!', 'success');
+  });
+}
+
+/* ===== Railway ===== */
+async function deployRailway() {
   var token = document.getElementById('railway-token').value.trim();
   var name = document.getElementById('railway-name').value.trim() || 'vless-panel';
   if (!token) { showToast('Enter your Railway API token', 'error'); return; }
   var btn = document.getElementById('btn-railway');
-  btn.classList.add('loading'); btn.disabled = true;
-  document.getElementById('result-railway').classList.remove('show');
-
-  var gql = '{"query":"mutation{projectCreate(input:{name:\\\"' + name + '\\\"}){project{id}}}"}';
-  var cmd = '# Step 1: Create Railway project\n' +
-    'curl -sS -X POST https://backboard.railway.app/graphql/v2 \\\n' +
-    "  -H 'Authorization: Bearer " + token + "' \\\n" +
-    "  -H 'Content-Type: application/json' \\\n" +
-    "  -d '" + gql + "'\n\n" +
-    '# Step 2: Open Railway and connect repo\n' +
-    'https://railway.app/new?repo=' + encodeURIComponent(REPO_URL) + '\n\n' +
-    '# Step 3: Set PORT=7860 in Railway environment variables';
-
-  setTimeout(function() {
-    showCmd('railway', cmd);
-    btn.classList.remove('loading'); btn.disabled = false;
-    showToast('Railway command ready - copy and run in terminal', 'success');
-  }, 800);
+  var res = document.getElementById('result-railway');
+  btn.classList.add('loading'); btn.disabled = true; res.classList.remove('show');
+  try {
+    var r = await fetch('https://backboard.railway.app/graphql/v2', {
+      method: 'POST',
+      headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ query: 'mutation{projectCreate(input:{name:"' + name + '"}){project{id name}}}' })
+    });
+    if (!r.ok) throw new Error('API ' + r.status);
+    var d = await r.json();
+    var pid = d.data && d.data.projectCreate && d.data.projectCreate.project;
+    if (!pid) throw new Error('Failed to create project');
+    /* add env var */
+    await fetch('https://backboard.railway.app/graphql/v2', {
+      method: 'POST',
+      headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ query: 'mutation{environmentVariableCreate(input:{environmentId:"' + pid.id + '",name:"PORT",value:"7860"}){environmentVariable{id}}}' })
+    });
+    showSuccess('result-railway', 'https://railway.app/project/' + pid.id);
+    showToast('Railway project created! Connect your repo in dashboard.', 'success');
+  } catch (e) {
+    var cmd = 'curl -sS -X POST https://backboard.railway.app/graphql/v2 \\\n  -H "Authorization: Bearer ' + token + '" \\\n  -H "Content-Type: application/json" \\\n  -d \'{"query":"mutation{projectCreate(input:{name:\\"' + name + '\\"}){project{id}}}"}\'\n\nThen open: https://railway.app/new?repo=' + encodeURIComponent(REPO_URL);
+    showFallback('result-railway', cmd);
+    showToast('Auto-deploy failed. Use the command below.', 'error');
+  } finally { btn.classList.remove('loading'); btn.disabled = false; }
 }
 
-function deployRender() {
+/* ===== Render ===== */
+async function deployRender() {
   var token = document.getElementById('render-token').value.trim();
   var name = document.getElementById('render-name').value.trim() || 'vless-panel';
   var region = document.getElementById('render-region').value;
   if (!token) { showToast('Enter your Render API key', 'error'); return; }
   var btn = document.getElementById('btn-render');
-  btn.classList.add('loading'); btn.disabled = true;
-  document.getElementById('result-render').classList.remove('show');
-
-  var json = '{"type":"web_service","name":"' + name + '","repoUrl":"' + REPO_URL + '","branch":"main","plan":"free","region":"' + region + '","envVars":[{"key":"PORT","value":"7860"}]}';
-  var cmd = 'curl -sS -X POST "https://api.render.com/v1/services" \\\n' +
-    "  -H 'Authorization: Bearer " + token + "' \\\n" +
-    "  -H 'Content-Type: application/json' \\\n" +
-    "  -H 'Accept: application/json' \\\n" +
-    "  -d '" + json + "'";
-
-  setTimeout(function() {
-    showCmd('render', cmd);
-    btn.classList.remove('loading'); btn.disabled = false;
-    showToast('Render command ready - copy and run in terminal', 'success');
-  }, 800);
+  var res = document.getElementById('result-render');
+  btn.classList.add('loading'); btn.disabled = true; res.classList.remove('show');
+  try {
+    var r = await fetch('https://api.render.com/v1/services', {
+      method: 'POST',
+      headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json', 'Accept': 'application/json' },
+      body: JSON.stringify({ type: 'web_service', name: name, repoUrl: REPO_URL, branch: 'main', plan: 'free', region: region, envVars: [{ key: 'PORT', value: '7860' }] })
+    });
+    if (!r.ok) { var err = await r.json().catch(function(){return {};}); throw new Error(err.error || 'API ' + r.status); }
+    showSuccess('result-render', 'https://' + name + '.onrender.com');
+    showToast('Deployed to Render! Building in progress...', 'success');
+  } catch (e) {
+    var json = JSON.stringify({type:'web_service',name:name,repoUrl:REPO_URL,branch:'main',plan:'free',region:region,envVars:[{key:'PORT',value:'7860'}]});
+    var cmd = 'curl -sS -X POST "https://api.render.com/v1/services" \\\n  -H "Authorization: Bearer ' + token + '" \\\n  -H "Content-Type: application/json" \\\n  -d \'' + json + '\'';
+    showFallback('result-render', cmd, 'Render free tier sleeps after 15 min. Use <a href="https://uptimerobot.com" target="_blank" style="color:var(--blue2)">UptimeRobot</a> to ping /ping every 5 min.');
+    showToast('Auto-deploy failed. Use the command below.', 'error');
+  } finally { btn.classList.remove('loading'); btn.disabled = false; }
 }
 
+/* ===== Fly.io (CLI-based, always shows command) ===== */
 function deployFly() {
   var token = document.getElementById('fly-token').value.trim();
   var name = document.getElementById('fly-name').value.trim() || 'vless-panel';
   var region = document.getElementById('fly-region').value;
   if (!token) { showToast('Enter your Fly.io token', 'error'); return; }
   var btn = document.getElementById('btn-fly');
-  btn.classList.add('loading'); btn.disabled = true;
-  document.getElementById('result-fly').classList.remove('show');
-
-  var cmd = '# Install Fly CLI\n' +
-    'curl -L https://fly.io/install.sh | sh\n\n' +
-    '# Login with token\n' +
-    'export FLY_API_TOKEN="' + token + '"\n\n' +
-    '# Clone and deploy\n' +
-    'git clone ' + REPO_URL + ' && cd Usf-Pnl-pro\n' +
-    'fly launch --name ' + name + ' --region ' + region + ' --no-deploy\n' +
-    'fly secrets set PORT=7860\n' +
-    'fly deploy\n\n' +
-    '# Panel: https://' + name + '.fly.dev';
-
+  var res = document.getElementById('result-fly');
+  btn.classList.add('loading'); btn.disabled = true; res.classList.remove('show');
+  var cmd = '# Install Fly CLI\ncurl -L https://fly.io/install.sh | sh\n\n# Login\nexport FLY_API_TOKEN="' + token + '"\n\n# Clone & deploy\ngit clone ' + REPO_URL + ' && cd Usf-Pnl-pro\nfly launch --name ' + name + ' --region ' + region + ' --no-deploy\nfly secrets set PORT=7860\nfly deploy\n\n# Panel: https://' + name + '.fly.dev';
   setTimeout(function() {
-    showCmd('fly', cmd);
+    showFallback('result-fly', cmd, 'Fly.io requires CLI. Copy the script above and run in terminal.');
     btn.classList.remove('loading'); btn.disabled = false;
-    showToast('Fly.io script ready - copy and run in terminal', 'success');
-  }, 800);
+    showToast('Fly.io deploy script ready', 'success');
+  }, 600);
 }
 
-function deployKoyeb() {
+/* ===== Koyeb ===== */
+async function deployKoyeb() {
   var token = document.getElementById('koyeb-token').value.trim();
   var name = document.getElementById('koyeb-name').value.trim() || 'vless-panel';
   var region = document.getElementById('koyeb-region').value;
   if (!token) { showToast('Enter your Koyeb API key', 'error'); return; }
   var btn = document.getElementById('btn-koyeb');
-  btn.classList.add('loading'); btn.disabled = true;
-  document.getElementById('result-koyeb').classList.remove('show');
-
-  var json = '{"name":"' + name + '","spec":{"type":"WEB","regions":["' + region + '"],"deployment":{"git":{"repository":"' + REPO_URL + '","branch":"main"}},"instances":[{"type":"NANO","count":1}],"env":[{"key":"PORT","value":"7860"}]}}';
-  var cmd = 'curl -sS -X POST "https://app.koyeb.com/v1/services" \\\n' +
-    "  -H 'Authorization: Bearer " + token + "' \\\n" +
-    "  -H 'Content-Type: application/json' \\\n" +
-    "  -d '" + json + "'";
-
-  setTimeout(function() {
-    showCmd('koyeb', cmd);
-    btn.classList.remove('loading'); btn.disabled = false;
-    showToast('Koyeb command ready - copy and run in terminal', 'success');
-  }, 800);
+  var res = document.getElementById('result-koyeb');
+  btn.classList.add('loading'); btn.disabled = true; res.classList.remove('show');
+  try {
+    var r = await fetch('https://app.koyeb.com/v1/services', {
+      method: 'POST',
+      headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: name, spec: { type: 'WEB', regions: [region], deployment: { git: { repository: REPO_URL, branch: 'main' } }, instances: [{ type: 'NANO', count: 1 }], env: [{ key: 'PORT', value: '7860' }] } })
+    });
+    if (!r.ok) throw new Error('API ' + r.status);
+    var d = await r.json();
+    var url = 'https://' + name + '-koyeb-app.koyeb.app';
+    showSuccess('result-koyeb', url);
+    showToast('Deployed to Koyeb! Building in progress...', 'success');
+  } catch (e) {
+    var json = JSON.stringify({name:name,spec:{type:'WEB',regions:[region],deployment:{git:{repository:REPO_URL,branch:'main'}},instances:[{type:'NANO',count:1}],env:[{key:'PORT',value:'7860'}]}});
+    var cmd = 'curl -sS -X POST "https://app.koyeb.com/v1/services" \\\n  -H "Authorization: Bearer ' + token + '" \\\n  -H "Content-Type: application/json" \\\n  -d \'' + json + '\'';
+    showFallback('result-koyeb', cmd, 'Koyeb free tier may restart. Use <a href="https://uptimerobot.com" target="_blank" style="color:var(--blue2)">UptimeRobot</a> to ping /ping every 5 min.');
+    showToast('Auto-deploy failed. Use the command below.', 'error');
+  } finally { btn.classList.remove('loading'); btn.disabled = false; }
 }
 document.addEventListener('keydown', function(e) {
   if (e.key === 'Escape') closeModal();
