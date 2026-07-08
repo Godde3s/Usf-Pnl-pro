@@ -1,0 +1,11 @@
+services:
+  - type: web
+    name: usf-pnl
+    env: docker
+    plan: free
+    region: oregon
+    healthCheckPath: /ping
+    autoDeploy: false
+    envVars:
+      - key: PANEL_PASSWORD
+        sync: false

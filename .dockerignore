@@ -1,0 +1,7 @@
+__pycache__
+*.pyc
+.git
+.github
+docs/
+*.md
+panel_db.json

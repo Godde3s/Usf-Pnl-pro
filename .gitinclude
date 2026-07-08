@@ -1,0 +1,9 @@
+app.py
+Dockerfile
+requirements.txt
+fly.toml
+render.yaml
+railway.json
+koyeb.yaml
+.dockerignore
+docs/index.html
