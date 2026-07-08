@@ -1123,34 +1123,25 @@ function showCmd(platform, cmd) {
 function deployRailway() {
   var token = document.getElementById('railway-token').value.trim();
   var name = document.getElementById('railway-name').value.trim() || 'vless-panel';
-  var region = document.getElementById('railway-region').value;
   if (!token) { showToast('Enter your Railway API token', 'error'); return; }
   var btn = document.getElementById('btn-railway');
   btn.classList.add('loading'); btn.disabled = true;
   document.getElementById('result-railway').classList.remove('show');
 
-  var cmd = '# Step 1: Create Railway project and service
-' +
-    'curl -sS -X POST https://backboard.railway.app/graphql/v2 \
-' +
-    '  -H "Authorization: Bearer ' + token + '" \
-' +
-    '  -H "Content-Type: application/json" \
-' +
-    '  -d '{"query":"mutation { projectCreate(input:{name:\"' + name + '"}) { project { id } } }"}'
-
-' +
-    '# Step 2: Open Railway dashboard and connect your repo
-' +
-    '# https://railway.app/new?repo=' + encodeURIComponent(REPO_URL) + '
-
-' +
-    '# Step 3: Set environment variable PORT=7860 in Railway settings';
+  var gql = '{"query":"mutation{projectCreate(input:{name:\\\"' + name + '\\\"}){project{id}}}"}';
+  var cmd = '# Step 1: Create Railway project\n' +
+    'curl -sS -X POST https://backboard.railway.app/graphql/v2 \\\n' +
+    "  -H 'Authorization: Bearer " + token + "' \\\n" +
+    "  -H 'Content-Type: application/json' \\\n" +
+    "  -d '" + gql + "'\n\n" +
+    '# Step 2: Open Railway and connect repo\n' +
+    'https://railway.app/new?repo=' + encodeURIComponent(REPO_URL) + '\n\n' +
+    '# Step 3: Set PORT=7860 in Railway environment variables';
 
   setTimeout(function() {
     showCmd('railway', cmd);
     btn.classList.remove('loading'); btn.disabled = false;
-    showToast('Railway deploy command ready - copy and run in terminal', 'success');
+    showToast('Railway command ready - copy and run in terminal', 'success');
   }, 800);
 }
 
@@ -1163,36 +1154,17 @@ function deployRender() {
   btn.classList.add('loading'); btn.disabled = true;
   document.getElementById('result-render').classList.remove('show');
 
-  var cmd = 'curl -sS -X POST "https://api.render.com/v1/services" \
-' +
-    '  -H "Authorization: Bearer ' + token + '" \
-' +
-    '  -H "Content-Type: application/json" \
-' +
-    '  -H "Accept: application/json" \
-' +
-    '  -d '{
-' +
-    '    "type": "web_service",
-' +
-    '    "name": "' + name + '",
-' +
-    '    "repoUrl": "' + REPO_URL + '",
-' +
-    '    "branch": "main",
-' +
-    '    "plan": "free",
-' +
-    '    "region": "' + region + '",
-' +
-    '    "envVars": [{"key": "PORT", "value": "7860"}]
-' +
-    '  }'';
+  var json = '{"type":"web_service","name":"' + name + '","repoUrl":"' + REPO_URL + '","branch":"main","plan":"free","region":"' + region + '","envVars":[{"key":"PORT","value":"7860"}]}';
+  var cmd = 'curl -sS -X POST "https://api.render.com/v1/services" \\\n' +
+    "  -H 'Authorization: Bearer " + token + "' \\\n" +
+    "  -H 'Content-Type: application/json' \\\n" +
+    "  -H 'Accept: application/json' \\\n" +
+    "  -d '" + json + "'";
 
   setTimeout(function() {
     showCmd('render', cmd);
     btn.classList.remove('loading'); btn.disabled = false;
-    showToast('Render deploy command ready - copy and run in terminal', 'success');
+    showToast('Render command ready - copy and run in terminal', 'success');
   }, 800);
 }
 
@@ -1205,33 +1177,21 @@ function deployFly() {
   btn.classList.add('loading'); btn.disabled = true;
   document.getElementById('result-fly').classList.remove('show');
 
-  var cmd = '# Install Fly CLI (if not installed)
-' +
-    'curl -L https://fly.io/install.sh | sh
-
-' +
-    '# Authenticate with your token
-' +
-    'export FLY_API_TOKEN="' + token + '"
-
-' +
-    '# Clone and deploy
-' +
-    'git clone ' + REPO_URL + ' && cd Usf-Pnl-pro
-' +
-    'fly launch --name ' + name + ' --region ' + region + ' --no-deploy
-' +
-    'fly secrets set PORT=7860
-' +
-    'fly deploy
-
-' +
-    '# Your panel: https://' + name + '.fly.dev';
+  var cmd = '# Install Fly CLI\n' +
+    'curl -L https://fly.io/install.sh | sh\n\n' +
+    '# Login with token\n' +
+    'export FLY_API_TOKEN="' + token + '"\n\n' +
+    '# Clone and deploy\n' +
+    'git clone ' + REPO_URL + ' && cd Usf-Pnl-pro\n' +
+    'fly launch --name ' + name + ' --region ' + region + ' --no-deploy\n' +
+    'fly secrets set PORT=7860\n' +
+    'fly deploy\n\n' +
+    '# Panel: https://' + name + '.fly.dev';
 
   setTimeout(function() {
     showCmd('fly', cmd);
     btn.classList.remove('loading'); btn.disabled = false;
-    showToast('Fly.io deploy script ready - copy and run in terminal', 'success');
+    showToast('Fly.io script ready - copy and run in terminal', 'success');
   }, 800);
 }
 
@@ -1244,46 +1204,16 @@ function deployKoyeb() {
   btn.classList.add('loading'); btn.disabled = true;
   document.getElementById('result-koyeb').classList.remove('show');
 
-  var cmd = 'curl -sS -X POST "https://app.koyeb.com/v1/services" \
-' +
-    '  -H "Authorization: Bearer ' + token + '" \
-' +
-    '  -H "Content-Type: application/json" \
-' +
-    '  -d '{
-' +
-    '    "name": "' + name + '",
-' +
-    '    "spec": {
-' +
-    '      "type": "WEB",
-' +
-    '      "regions": ["' + region + '"],
-' +
-    '      "deployment": {
-' +
-    '        "git": {
-' +
-    '          "repository": "' + REPO_URL + '",
-' +
-    '          "branch": "main"
-' +
-    '        }
-' +
-    '      },
-' +
-    '      "instances": [{"type": "NANO", "count": 1}],
-' +
-    '      "env": [{"key": "PORT", "value": "7860"}]
-' +
-    '    }
-' +
-    '  }'';
+  var json = '{"name":"' + name + '","spec":{"type":"WEB","regions":["' + region + '"],"deployment":{"git":{"repository":"' + REPO_URL + '","branch":"main"}},"instances":[{"type":"NANO","count":1}],"env":[{"key":"PORT","value":"7860"}]}}';
+  var cmd = 'curl -sS -X POST "https://app.koyeb.com/v1/services" \\\n' +
+    "  -H 'Authorization: Bearer " + token + "' \\\n" +
+    "  -H 'Content-Type: application/json' \\\n" +
+    "  -d '" + json + "'";
 
   setTimeout(function() {
     showCmd('koyeb', cmd);
     btn.classList.remove('loading'); btn.disabled = false;
-    showToast('Koyeb deploy command ready - copy and run in terminal', 'success');
+    showToast('Koyeb command ready - copy and run in terminal', 'success');
   }, 800);
 }
 document.addEventListener('keydown', function(e) {
