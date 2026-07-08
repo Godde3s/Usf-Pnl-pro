@@ -890,7 +890,7 @@ async function deployHuggingFace() {
   try {
     showProgress('result-huggingface', steps);
 
-    /* Step 1: Get username */
+    /* Step 1: Get username (GET works direct, no CORS issue) */
     var user = username;
     if (!user) {
       var me = await fetch('https://huggingface.co/api/whoami-v2', {
@@ -911,8 +911,8 @@ async function deployHuggingFace() {
     steps[1].status = 'active';
     showProgress('result-huggingface', steps);
 
-    /* Step 2: Create space */
-    var createRes = await fetch('https://huggingface.co/api/spaces/' + user + '/' + spaceName, {
+    /* Step 2: Create space via proxy (POST needs CORS proxy) */
+    var createRes = await proxyFetch('https://huggingface.co/api/spaces/' + user + '/' + spaceName, {
       method: 'POST',
       headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
       body: JSON.stringify({ private: false, sdk: 'docker', license: 'mit' })
@@ -935,7 +935,7 @@ async function deployHuggingFace() {
     steps[2].status = 'active';
     showProgress('result-huggingface', steps);
 
-    /* Step 3: Upload files */
+    /* Step 3: Upload files via proxy */
     for (var i = 0; i < FILES.length; i++) {
       steps[2].text = 'Uploading: ' + FILES[i] + ' (' + (i + 1) + '/' + FILES.length + ')';
       showProgress('result-huggingface', steps);
@@ -944,7 +944,7 @@ async function deployHuggingFace() {
       var fileRes = await fetch(fileUrl);
       if (!fileRes.ok) throw new Error('Download failed for ' + FILES[i] + ' (HTTP ' + fileRes.status + ')');
       var content = await fileRes.text();
-      var uploadRes = await fetch('https://huggingface.co/api/spaces/' + user + '/' + spaceName + '/upload/' + FILES[i], {
+      var uploadRes = await proxyFetch('https://huggingface.co/api/spaces/' + user + '/' + spaceName + '/upload/' + FILES[i], {
         method: 'POST',
         headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
         body: JSON.stringify({ content: btoa(unescape(encodeURIComponent(content))) })
