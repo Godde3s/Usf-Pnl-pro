@@ -867,59 +867,108 @@ function selectPlatform(platform) {
    HUGGINGFACE DEPLOY (direct API - works from browser)
    ============================================================ */
 async function deployHuggingFace() {
-  const token = document.getElementById('hf-token').value.trim();
-  const spaceName = document.getElementById('hf-space').value.trim() || 'vless-panel';
-  const username = document.getElementById('hf-username').value.trim();
+  var token = document.getElementById('hf-token').value.trim();
+  var spaceName = document.getElementById('hf-space').value.trim() || 'vless-panel';
+  var username = document.getElementById('hf-username').value.trim();
 
-  if (!token) { showToast('Please enter your Hugging Face token', 'error'); return; }
-  if (!/^[a-zA-Z0-9\-_]+$/.test(spaceName)) { showToast('Invalid space name (only letters, numbers, hyphens, underscores)', 'error'); return; }
+  if (!token) { showToast('Enter your Hugging Face token', 'error'); return; }
+  if (!/^[a-zA-Z0-9\-_]+$/.test(spaceName)) { showToast('Invalid space name', 'error'); return; }
 
-  const btn = document.getElementById('btn-huggingface');
-  const result = document.getElementById('result-huggingface');
+  var btn = document.getElementById('btn-huggingface');
+  var result = document.getElementById('result-huggingface');
   btn.classList.add('loading');
   btn.disabled = true;
   result.classList.remove('show');
 
+  var steps = [
+    { text: 'Verifying token...', status: 'active' },
+    { text: 'Creating space: ' + spaceName, status: 'pending' },
+    { text: 'Uploading files to HuggingFace...', status: 'pending' },
+    { text: 'Starting build...', status: 'pending' }
+  ];
+
   try {
-    // 1. Get username
-    let user = username;
+    showProgress('result-huggingface', steps);
+
+    /* Step 1: Get username */
+    var user = username;
     if (!user) {
-      const me = await fetch('https://huggingface.co/api/whoami-v2', { headers: { 'Authorization': 'Bearer ' + token } });
-      if (!me.ok) throw new Error('Invalid token or permission denied');
-      const meData = await me.json();
-      user = meData.name || meData.username;
+      var me = await fetch('https://huggingface.co/api/whoami-v2', {
+        headers: { 'Authorization': 'Bearer ' + token }
+      });
+      if (!me.ok) {
+        if (me.status === 401 || me.status === 403) {
+          throw new Error('Token invalid or no "write" permission. Go to huggingface.co/settings/tokens and create token with WRITE access.');
+        }
+        throw new Error('Token check failed (HTTP ' + me.status + ')');
+      }
+      var meData = await me.json();
+      user = meData.name || meData.username || meData.id;
+      if (!user) throw new Error('Could not get username from token');
     }
 
-    // 2. Create space
-    const createRes = await fetch('https://huggingface.co/api/spaces/' + user + '/' + spaceName, {
+    steps[0].status = 'done';
+    steps[1].status = 'active';
+    showProgress('result-huggingface', steps);
+
+    /* Step 2: Create space */
+    var createRes = await fetch('https://huggingface.co/api/spaces/' + user + '/' + spaceName, {
       method: 'POST',
       headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
       body: JSON.stringify({ private: false, sdk: 'docker', license: 'mit' })
     });
-    if (createRes.status === 409) { /* space exists, ok */ }
-    else if (!createRes.ok) { const err = await createRes.json().catch(() => ({})); throw new Error(err.error || 'Failed to create space'); }
 
-    // 3. Upload files
-    for (const file of FILES) {
-      const fileUrl = GITHUB_RAW + '/' + file;
-      const fileRes = await fetch(fileUrl);
-      if (!fileRes.ok) throw new Error('Failed to download ' + file + ' — update GITHUB_RAW in the source');
-      const content = await fileRes.text();
-      const uploadRes = await fetch('https://huggingface.co/api/spaces/' + user + '/' + spaceName + '/upload/' + file, {
+    if (createRes.status === 409) {
+      /* space already exists */
+    } else if (!createRes.ok) {
+      var errText = await createRes.text().catch(function() { return ''; });
+      var errMsg = 'Create space failed (HTTP ' + createRes.status + ')';
+      if (createRes.status === 401 || createRes.status === 403) {
+        errMsg = 'Permission denied. Token needs WRITE scope. Recreate at huggingface.co/settings/tokens';
+      } else if (errText) {
+        errMsg = 'Create space failed: ' + errText.substring(0, 120);
+      }
+      throw new Error(errMsg);
+    }
+
+    steps[1].status = 'done';
+    steps[2].status = 'active';
+    showProgress('result-huggingface', steps);
+
+    /* Step 3: Upload files */
+    for (var i = 0; i < FILES.length; i++) {
+      steps[2].text = 'Uploading: ' + FILES[i] + ' (' + (i + 1) + '/' + FILES.length + ')';
+      showProgress('result-huggingface', steps);
+
+      var fileUrl = GITHUB_RAW + '/' + FILES[i];
+      var fileRes = await fetch(fileUrl);
+      if (!fileRes.ok) throw new Error('Download failed for ' + FILES[i] + ' (HTTP ' + fileRes.status + ')');
+      var content = await fileRes.text();
+      var uploadRes = await fetch('https://huggingface.co/api/spaces/' + user + '/' + spaceName + '/upload/' + FILES[i], {
         method: 'POST',
         headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
         body: JSON.stringify({ content: btoa(unescape(encodeURIComponent(content))) })
       });
-      if (!uploadRes.ok) throw new Error('Failed to upload ' + file);
+      if (!uploadRes.ok) {
+        var upErr = await uploadRes.text().catch(function() { return ''; });
+        throw new Error('Upload failed for ' + FILES[i] + ': ' + upErr.substring(0, 100));
+      }
     }
 
-    // 4. Show result
-    const url = 'https://' + user + '-' + spaceName + '.hf.space';
-    document.getElementById('hf-result-url').href = url;
-    document.getElementById('hf-result-url').textContent = url;
-    result.classList.add('show');
-    showToast('Deployed successfully! Building in progress...', 'success');
+    steps[2].status = 'done';
+    steps[3].status = 'done';
+    var hfUrl = 'https://' + user + '-' + spaceName + '.hf.space';
+    showProgress('result-huggingface', steps, {
+      url: hfUrl,
+      note: 'HuggingFace is building your space (2-3 min). Free spaces sleep after 48h inactivity.'
+    });
+    showToast('Deployed to HuggingFace! Building...', 'success');
+
   } catch (e) {
+    steps = steps.map(function(s) {
+      return s.status === 'active' ? { text: s.text + ' - ' + e.message, status: 'error' } : s;
+    });
+    showProgress('result-huggingface', steps);
     showToast(e.message || 'Deploy failed', 'error');
   } finally {
     btn.classList.remove('loading');
