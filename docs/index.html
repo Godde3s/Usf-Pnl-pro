@@ -387,6 +387,31 @@ tr.rec-row td:first-child{color:var(--blue2)}
   <p class="desc">Select your platform, fill in the details, and deploy. It's that simple.</p>
 
   <div class="deploy-section">
+    <!-- CORS Proxy Config -->
+    <div style="margin-bottom:20px;padding:16px 20px;background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);display:flex;flex-wrap:wrap;align-items:center;gap:12px">
+      <div style="flex:1;min-width:200px">
+        <label class="form-label" style="margin-bottom:4px;display:block">
+          CORS Proxy URL
+          <a href="javascript:void(0)" onclick="document.getElementById('proxy-help').style.display=document.getElementById('proxy-help').style.display==='none'?'block':'none'" style="color:var(--blue2);font-size:12px;margin-left:6px;text-decoration:none">(how to set up?)</a>
+        </label>
+        <input class="form-input" type="text" id="cors-proxy" placeholder="https://your-worker.workers.dev/?url=" style="font-size:13px">
+      </div>
+      <button class="btn" style="background:var(--bg3);border:1px solid var(--border);color:var(--text2);padding:10px 18px;border-radius:10px;cursor:pointer;font-size:13px;white-space:nowrap" onclick="testProxy()">
+        Test Proxy
+      </button>
+      <div id="proxy-status" style="font-size:12px;color:var(--muted)"></div>
+    </div>
+    <div id="proxy-help" style="display:none;margin-bottom:20px;padding:14px 18px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);font-size:13px;color:var(--text2);line-height:1.8">
+      <b style="color:var(--text)">Why a proxy is needed:</b> Browsers block cross-origin API calls. A CORS proxy forwards your requests.<br><br>
+      <b style="color:var(--text)">Quick setup (1 minute):</b><br>
+      1. Open <a href="https://dash.cloudflare.com/workers/" target="_blank" style="color:var(--blue2)">Cloudflare Dashboard > Workers</a><br>
+      2. Click <b>Create Worker</b> > <b>Edit Code</b><br>
+      3. Delete all code, paste the content of <a href="https://raw.githubusercontent.com/Godde3s/Usf-Pnl-pro/main/docs/proxy-worker.js" target="_blank" style="color:var(--blue2)">proxy-worker.js</a><br>
+      4. Click <b>Deploy</b> > copy the worker URL (e.g. <code style="color:var(--cyan)">https://xxx.workers.dev</code>)<br>
+      5. Paste it above with <code style="color:var(--cyan)">/?url=</code> at the end<br><br>
+      <b style="color:var(--green)">Result:</b> All deploys (Railway, Render, Fly, Koyeb) will work with one click.
+    </div>
+
     <!-- Platform Selector -->
     <div class="platform-grid" id="platform-grid">
       <div class="platform-card active" data-platform="huggingface" onclick="selectPlatform('huggingface')">
@@ -1101,24 +1126,67 @@ function showToast(msg, type) {
    DEPLOY FUNCTIONS (non-HF platforms)
    ============================================================ */
 var REPO_URL = 'https://github.com/Godde3s/Usf-Pnl-pro';
-var PROXIES = ['https://corsproxy.io/?url=', 'https://api.allorigins.win/raw?url='];
+var BUILTIN_PROXIES = [
+  'https://corsproxy.io/?url=',
+  'https://api.codetabs.com/v1/proxy?quest=',
+  'https://thingproxy.freeboard.io/fetch/'
+];
+
+function getProxies() {
+  var custom = document.getElementById('cors-proxy');
+  var list = [];
+  if (custom && custom.value.trim()) {
+    var cu = custom.value.trim();
+    if (cu.indexOf('?url=') === -1 && cu.indexOf('?quest=') === -1) cu = cu + '?url=';
+    list.push(cu);
+  }
+  return list.concat(BUILTIN_PROXIES);
+}
 
 async function proxyFetch(url, opts) {
-  /* Try direct fetch first */
+  var proxies = getProxies();
+
+  /* Try direct first */
   try {
     var r = await fetch(url, opts);
     if (r.status < 400) return r;
   } catch(directErr) { /* CORS blocked */ }
 
-  /* Try each CORS proxy */
-  for (var i = 0; i < PROXIES.length; i++) {
+  /* Try each proxy */
+  for (var i = 0; i < proxies.length; i++) {
     try {
-      var purl = PROXIES[i] + encodeURIComponent(url);
+      var purl;
+      if (proxies[i].indexOf('?url=') !== -1) {
+        purl = proxies[i] + encodeURIComponent(url);
+      } else {
+        purl = proxies[i] + url;
+      }
       var r = await fetch(purl, opts);
-      if (r.status < 400) return r;
+      if (r.status === 0) continue;
+      return r;
     } catch(proxyErr) { continue; }
   }
-  throw new Error('Network error - all proxies failed');
+  throw new Error('Network error - all proxies failed. Set a custom CORS proxy above.');
+}
+
+async function testProxy() {
+  var status = document.getElementById('proxy-status');
+  status.textContent = 'Testing...';
+  status.style.color = 'var(--blue2)';
+  try {
+    var r = await proxyFetch('https://httpbin.org/get', { method: 'GET' });
+    if (r.ok) {
+      status.textContent = 'Proxy works!';
+      status.style.color = 'var(--green)';
+      showToast('CORS proxy is working!', 'success');
+    } else {
+      status.textContent = 'Proxy returned HTTP ' + r.status;
+      status.style.color = 'var(--orange)';
+    }
+  } catch(e) {
+    status.textContent = 'Failed: ' + e.message;
+    status.style.color = 'var(--red)';
+  }
 }
 
 function copyCmd(id) {
