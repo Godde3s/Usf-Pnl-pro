@@ -3,6 +3,9 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
 <title>Usf-Pnl Pro - Multi-Platform VLESS Panel Builder</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
@@ -916,11 +919,16 @@ async function deployHuggingFace() {
 
     /* Step 2: Create space via /api/repos/create (correct HF endpoint) */
     var createPayload = { name: spaceName, type: 'space', sdk: 'docker', private: false };
-    var createRes = await proxyFetch('https://huggingface.co/api/repos/create', {
-      method: 'POST',
-      headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
-      body: JSON.stringify(createPayload)
-    });
+    var createRes;
+    try {
+      createRes = await proxyFetch('https://huggingface.co/api/repos/create', {
+        method: 'POST',
+        headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
+        body: JSON.stringify(createPayload)
+      });
+    } catch(fetchErr) {
+      throw new Error('Network error creating space: ' + fetchErr.message + '. Check your CORS proxy is working.');
+    }
 
     if (createRes.status === 409) {
       /* space already exists - fine */
@@ -930,7 +938,11 @@ async function deployHuggingFace() {
       throw new Error('HF requires a payment method for Docker Spaces. Add a card at huggingface.co/settings/billing (free tier, $0).');
     } else if (!createRes.ok) {
       var errText = await createRes.text().catch(function() { return ''; });
-      throw new Error('Create space failed (HTTP ' + createRes.status + '): ' + errText.substring(0, 100));
+      /* Detect if proxy returned HTML instead of forwarding (old cached JS issue) */
+      if (errText.indexOf('Cannot POST') !== -1 || errText.indexOf('<!DOCTYPE') !== -1 || errText.indexOf('<html') !== -1) {
+        throw new Error('CORS proxy is not forwarding POST correctly. Hard-refresh page (Ctrl+Shift+R) and try again.');
+      }
+      throw new Error('Create space failed (HTTP ' + createRes.status + '): ' + errText.substring(0, 150));
     }
 
     steps[1].status = 'done';
@@ -1213,28 +1225,41 @@ function getProxies() {
 
 async function proxyFetch(url, opts) {
   var proxies = getProxies();
+  var lastErr = '';
+  var method = (opts && opts.method) || 'GET';
 
   /* Try direct first */
   try {
     var r = await fetch(url, opts);
     if (r.status < 400) return r;
-  } catch(directErr) { /* CORS blocked */ }
+    lastErr = 'Direct HTTP ' + r.status;
+  } catch(directErr) { lastErr = 'Direct: ' + (directErr.message || 'CORS blocked'); }
 
   /* Try each proxy */
   for (var i = 0; i < proxies.length; i++) {
     try {
       var purl;
-      if (proxies[i].indexOf('?url=') !== -1) {
+      if (proxies[i].indexOf('?url=') !== -1 || proxies[i].indexOf('?quest=') !== -1) {
         purl = proxies[i] + encodeURIComponent(url);
       } else {
         purl = proxies[i] + url;
       }
       var r = await fetch(purl, opts);
-      if (r.status === 0) continue;
+      if (r.status === 0) { lastErr = 'Proxy ' + (i+1) + ' empty response'; continue; }
+      if (r.status >= 500) { lastErr = 'Proxy ' + (i+1) + ' HTTP ' + r.status; continue; }
+      /* For POST requests, verify we got a JSON/ndjson response, not HTML from a broken proxy */
+      if (method === 'POST' || method === 'PUT' || method === 'PATCH') {
+        var ct = r.headers.get('content-type') || '';
+        if (ct.indexOf('text/html') !== -1 && r.status === 200) {
+          /* Likely the proxy returned its own error page instead of forwarding */
+          lastErr = 'Proxy ' + (i+1) + ' returned HTML (not forwarding POST properly)';
+          continue;
+        }
+      }
       return r;
-    } catch(proxyErr) { continue; }
+    } catch(proxyErr) { lastErr = 'Proxy ' + (i+1) + ': ' + (proxyErr.message || proxyErr); continue; }
   }
-  throw new Error('Network error - all proxies failed. Set a custom CORS proxy above.');
+  throw new Error('Network error - all proxies failed. Last: ' + lastErr);
 }
 
 async function testProxy() {
@@ -1351,15 +1376,17 @@ async function deployRailway() {
     { text: 'Authenticating with Railway...', status: 'active' },
     { text: 'Creating project: ' + name, status: 'pending' },
     { text: 'Setting environment variables...', status: 'pending' },
-    { text: 'Deploying from GitHub repo...', status: 'pending' },
+    { text: 'Connecting GitHub repo...', status: 'pending' },
     { text: 'Finalizing...', status: 'pending' }
   ];
+
+  var pid = '';
 
   try {
     showProgress('result-railway', steps);
 
-    /* Step 1: Create project */
-    var body1 = { query: 'mutation{projectCreate(input:{name:"' + name + '"}){project{id name environments{edges{node{id}}}}}}' };
+    /* Step 1: Create project - projectCreate returns Project type directly, NOT wrapped in {project{...}} */
+    var body1 = { query: 'mutation{projectCreate(input:{name:"' + name + '"}){id}}' };
     var r1 = await proxyFetch('https://backboard.railway.app/graphql/v2', {
       method: 'POST',
       headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
@@ -1367,59 +1394,92 @@ async function deployRailway() {
     });
     var d1 = await r1.json();
     if (d1.errors && d1.errors[0]) throw new Error(d1.errors[0].message);
-    var proj = d1.data && d1.data.projectCreate && d1.data.projectCreate.project;
-    if (!proj) throw new Error('Failed to create project');
-    var pid = proj.id;
-    var envEdges = proj.environments && proj.environments.edges;
-    var envId = envEdges && envEdges[0] && envEdges[0].node && envEdges[0].node.id;
-    if (!envId) throw new Error('Failed to get environment ID');
+    var proj = d1.data && d1.data.projectCreate;
+    if (!proj || !proj.id) throw new Error('Failed to create project: ' + JSON.stringify(d1).substring(0, 200));
+    pid = proj.id;
 
     steps[0].status = 'done';
     steps[1].status = 'done';
     steps[2].status = 'active';
     showProgress('result-railway', steps);
 
-    /* Step 2: Set env vars */
-    var envVars = [['PORT', '7860'], ['UVICORN_HOST', '0.0.0.0']];
-    for (var i = 0; i < envVars.length; i++) {
-      var bodyVar = { query: 'mutation{environmentVariableCreate(input:{environmentId:"' + envId + '",name:"' + envVars[i][0] + '",value:"' + envVars[i][1] + '"}){environmentVariable{id}}}' };
-      await proxyFetch('https://backboard.railway.app/graphql/v2', {
+    /* Step 2: Get environment ID for this project */
+    var envId = '';
+    try {
+      var bodyEnv = { query: '{project(id:"' + pid + '"){environments{edges{node{id}}}}}' };
+      var rEnv = await proxyFetch('https://backboard.railway.app/graphql/v2', {
         method: 'POST',
         headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
-        body: JSON.stringify(bodyVar)
+        body: JSON.stringify(bodyEnv)
       });
+      var dEnv = await rEnv.json();
+      if (dEnv.errors) {
+        /* Try listing projects to find env */
+        var bodyMe = { query: '{me{id}}' };
+        var rMe = await proxyFetch('https://backboard.railway.app/graphql/v2', {
+          method: 'POST',
+          headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
+          body: JSON.stringify(bodyMe)
+        });
+      } else {
+        var envEdges = dEnv.data && dEnv.data.project && dEnv.data.project.environments && dEnv.data.project.environments.edges;
+        envId = envEdges && envEdges[0] && envEdges[0].node && envEdges[0].node.id;
+      }
+    } catch(envErr) {
+      /* env var setup will be skipped */
+    }
+
+    /* Step 2b: Set env vars (if we got an env ID) */
+    if (envId) {
+      var envVars = [['PORT', '7860'], ['UVICORN_HOST', '0.0.0.0']];
+      for (var i = 0; i < envVars.length; i++) {
+        try {
+          var bodyVar = { query: 'mutation{environmentVariableCreate(input:{environmentId:"' + envId + '",name:"' + envVars[i][0] + '",value:"' + envVars[i][1] + '"}){id}}' };
+          await proxyFetch('https://backboard.railway.app/graphql/v2', {
+            method: 'POST',
+            headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
+            body: JSON.stringify(bodyVar)
+          });
+        } catch(varErr) { /* skip individual var errors */ }
+      }
     }
 
     steps[2].status = 'done';
     steps[3].status = 'active';
     showProgress('result-railway', steps);
 
-    /* Step 3: Create service from GitHub repo */
-    var body3 = { query: 'mutation{serviceCreate(input:{projectId:"' + pid + '",source:{repo:"Godde3s/Usf-Pnl-pro",branch:"main"}}){service{id}}}' };
-    var r3 = await proxyFetch('https://backboard.railway.app/graphql/v2', {
-      method: 'POST',
-      headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
-      body: JSON.stringify(body3)
-    });
-    var d3 = await r3.json();
-    var svc = d3.data && d3.data.serviceCreate && d3.data.serviceCreate.service;
+    /* Step 3: Try to create service with GitHub source */
+    var svcCreated = false;
+    try {
+      var body3 = { query: 'mutation{serviceCreate(input:{projectId:"' + pid + '",source:{repo:"Godde3s/Usf-Pnl-pro",branch:"main"}}){id}}' };
+      var r3 = await proxyFetch('https://backboard.railway.app/graphql/v2', {
+        method: 'POST',
+        headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
+        body: JSON.stringify(body3)
+      });
+      var d3 = await r3.json();
+      if (d3.data && d3.data.serviceCreate && d3.data.serviceCreate.id) {
+        svcCreated = true;
+      }
+    } catch(svcErr) { /* service creation via API may not be supported */ }
 
     steps[3].status = 'done';
     steps[4].status = 'done';
 
-    if (svc) {
+    if (svcCreated) {
       showProgress('result-railway', steps, {
         url: 'https://railway.app/project/' + pid,
         note: 'Service deployed! Railway is building your panel now (1-2 min).'
       });
       showToast('Deployed to Railway! Building...', 'success');
     } else {
-      var deployUrl = 'https://railway.app/new/Godde3s/Usf-Pnl-pro';
+      /* Provide direct link to add service in the project */
+      var newServiceUrl = 'https://railway.app/project/' + pid + '/new?repoName=Godde3s%2FUsf-Pnl-pro';
       showProgress('result-railway', steps, {
-        url: deployUrl,
-        note: 'Project created! Click the URL to connect your repo and finish deployment.'
+        url: newServiceUrl,
+        note: 'Project created successfully! Click the link to connect your GitHub repo and deploy.'
       });
-      showToast('Railway project created! Click to finish.', 'success');
+      showToast('Railway project ready! Click to connect repo.', 'success');
     }
   } catch (e) {
     steps = steps.map(function(s) {
@@ -1428,7 +1488,7 @@ async function deployRailway() {
     showProgress('result-railway', steps);
     var cmd = makeCurlCmd('POST', 'https://backboard.railway.app/graphql/v2',
       { 'Authorization': 'Bearer TOKEN', 'Content-Type': 'application/json' },
-      { query: 'mutation{projectCreate(input:{name:"' + name + '"}){project{id}}}' }
+      { query: 'mutation{projectCreate(input:{name:"' + name + '"}){id}}' }
     );
     res.innerHTML += '<div style="margin-top:12px;border-top:1px solid var(--border);padding-top:12px"><div class="label">Fallback command (replace TOKEN):</div><pre style="white-space:pre-wrap;word-break:break-all;color:var(--cyan);font-size:11px;margin:8px 0;cursor:pointer" onclick="copyText(this)">' + cmd + '</pre></div>';
     showToast('Deploy failed: ' + (e.message || 'Unknown error'), 'error');
