@@ -883,14 +883,16 @@ async function deployHuggingFace() {
   var steps = [
     { text: 'Verifying token...', status: 'active' },
     { text: 'Creating space: ' + spaceName, status: 'pending' },
-    { text: 'Uploading files to HuggingFace...', status: 'pending' },
+    { text: 'Uploading files via commit API...', status: 'pending' },
     { text: 'Starting build...', status: 'pending' }
   ];
+
+  var repoId = '';
 
   try {
     showProgress('result-huggingface', steps);
 
-    /* Step 1: Get username (GET works direct, no CORS issue) */
+    /* Step 1: Get username (GET - works direct) */
     var user = username;
     if (!user) {
       var me = await fetch('https://huggingface.co/api/whoami-v2', {
@@ -898,7 +900,7 @@ async function deployHuggingFace() {
       });
       if (!me.ok) {
         if (me.status === 401 || me.status === 403) {
-          throw new Error('Token invalid or no "write" permission. Go to huggingface.co/settings/tokens and create token with WRITE access.');
+          throw new Error('Token invalid or no "write" permission. Create one at huggingface.co/settings/tokens with WRITE access.');
         }
         throw new Error('Token check failed (HTTP ' + me.status + ')');
       }
@@ -906,53 +908,68 @@ async function deployHuggingFace() {
       user = meData.name || meData.username || meData.id;
       if (!user) throw new Error('Could not get username from token');
     }
+    repoId = user + '/' + spaceName;
 
     steps[0].status = 'done';
     steps[1].status = 'active';
     showProgress('result-huggingface', steps);
 
-    /* Step 2: Create space via proxy (POST needs CORS proxy) */
-    var createRes = await proxyFetch('https://huggingface.co/api/spaces/' + user + '/' + spaceName, {
+    /* Step 2: Create space via /api/repos/create (correct HF endpoint) */
+    var createPayload = { name: spaceName, type: 'space', sdk: 'docker', private: false };
+    var createRes = await proxyFetch('https://huggingface.co/api/repos/create', {
       method: 'POST',
       headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ private: false, sdk: 'docker', license: 'mit' })
+      body: JSON.stringify(createPayload)
     });
 
     if (createRes.status === 409) {
-      /* space already exists */
+      /* space already exists - fine */
+    } else if (createRes.status === 401 || createRes.status === 403) {
+      throw new Error('Permission denied. Token needs WRITE scope.');
     } else if (!createRes.ok) {
       var errText = await createRes.text().catch(function() { return ''; });
-      var errMsg = 'Create space failed (HTTP ' + createRes.status + ')';
-      if (createRes.status === 401 || createRes.status === 403) {
-        errMsg = 'Permission denied. Token needs WRITE scope. Recreate at huggingface.co/settings/tokens';
-      } else if (errText) {
-        errMsg = 'Create space failed: ' + errText.substring(0, 120);
-      }
-      throw new Error(errMsg);
+      throw new Error('Create space failed (HTTP ' + createRes.status + '): ' + errText.substring(0, 100));
     }
 
     steps[1].status = 'done';
     steps[2].status = 'active';
     showProgress('result-huggingface', steps);
 
-    /* Step 3: Upload files via proxy */
+    /* Step 3: Upload all files in one commit using ndjson /commit/main API */
+    var ndjsonLines = [];
+    ndjsonLines.push(JSON.stringify({ key: 'header', value: { summary: 'Deploy VLESS panel', description: '' } }));
+
     for (var i = 0; i < FILES.length; i++) {
-      steps[2].text = 'Uploading: ' + FILES[i] + ' (' + (i + 1) + '/' + FILES.length + ')';
+      steps[2].text = 'Downloading: ' + FILES[i] + ' (' + (i + 1) + '/' + FILES.length + ')';
       showProgress('result-huggingface', steps);
 
       var fileUrl = GITHUB_RAW + '/' + FILES[i];
       var fileRes = await fetch(fileUrl);
       if (!fileRes.ok) throw new Error('Download failed for ' + FILES[i] + ' (HTTP ' + fileRes.status + ')');
-      var content = await fileRes.text();
-      var uploadRes = await proxyFetch('https://huggingface.co/api/spaces/' + user + '/' + spaceName + '/upload/' + FILES[i], {
-        method: 'POST',
-        headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ content: btoa(unescape(encodeURIComponent(content))) })
-      });
-      if (!uploadRes.ok) {
-        var upErr = await uploadRes.text().catch(function() { return ''; });
-        throw new Error('Upload failed for ' + FILES[i] + ': ' + upErr.substring(0, 100));
-      }
+      var fileContent = await fileRes.text();
+      var b64 = btoa(unescape(encodeURIComponent(fileContent)));
+
+      ndjsonLines.push(JSON.stringify({
+        key: 'file',
+        value: { content: b64, path: FILES[i], encoding: 'base64' }
+      }));
+    }
+
+    steps[2].text = 'Committing files to space...';
+    showProgress('result-huggingface', steps);
+
+    var commitRes = await proxyFetch('https://huggingface.co/api/spaces/' + repoId + '/commit/main', {
+      method: 'POST',
+      headers: {
+        'Authorization': 'Bearer ' + token,
+        'Content-Type': 'application/x-ndjson'
+      },
+      body: ndjsonLines.join('\n') + '\n'
+    });
+
+    if (!commitRes.ok) {
+      var commitErr = await commitRes.text().catch(function() { return ''; });
+      throw new Error('Commit failed (HTTP ' + commitRes.status + '): ' + commitErr.substring(0, 150));
     }
 
     steps[2].status = 'done';
