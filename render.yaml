@@ -5,7 +5,12 @@ services:
     plan: free
     region: oregon
     healthCheckPath: /ping
+    healthCheckInterval: 15
+    healthCheckTimeout: 10
+    healthCheckRetries: 3
     autoDeploy: false
     envVars:
+      - key: PORT
+        value: "10000"
       - key: PANEL_PASSWORD
         sync: false
